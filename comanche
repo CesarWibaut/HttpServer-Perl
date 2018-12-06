@@ -4,9 +4,10 @@ use warnings;
 
 
 my %config = ();
-
+my %exec = ();
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n";
+    keys(%exec) and values(%exec) or die "Missing config parameter\n";
 }
 sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
@@ -15,6 +16,10 @@ sub initConfig {
         if(/set\ */){
             @param = split / /, $_;
             $config{$param[1]} = $param[2];
+        }
+        if(/exec\ */){
+            @param = split / /, $_;
+            $exec{$param[1]} = $param[3];
         }
     }
 
