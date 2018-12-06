@@ -8,6 +8,7 @@ my %config = ();
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n";
 }
+
 sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
