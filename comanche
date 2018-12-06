@@ -2,11 +2,12 @@
 use strict;
 use warnings;
 
+use Socket;
 
 my %config = ();
 my %exec = ();
-
 my %route = ();
+
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n" ;
 	keys(%route) and values(%route) or die "Missing config parameter";
@@ -34,5 +35,30 @@ sub initConfig {
     close(CONFIG);
 }
 
+sub parseRequest {
+    my @param = ();
+    my $path = "";
+    while(<CLIENT>){
+        if($. == 1){
+            @param = split / /, $_;
+            $param[0] eq "GET" or die "Invalid Method\n";
+            $path = $param[1];
+            $param[2] eq "HTTP/1.1\r\n" or die "HTTP Version not supported\n"; 
+        }elsif($_ eq "\r\n"){
+            return $path;
+        }
+    }
+    die "Error parsing request\n";
+}
+
 initConfig();
 
+socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création impossible");
+setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
+my $adresse_complete = sockaddr_in($config{"port"}, INADDR_ANY) or die("sockaddr");
+bind(SERVEUR, $adresse_complete) or die("bind");
+listen(SERVEUR, $config{"clients"}) or die("listen");
+
+accept(CLIENT,SERVEUR);
+
+print parseRequest();
