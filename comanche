@@ -33,6 +33,13 @@ sub initConfig {
     verifConfig();
     close(CONFIG);
 }
+sub verifFichier{
+    if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
+        return 1;
+    }else{
+        return 0;
+    }
+}
 
 initConfig();
 
