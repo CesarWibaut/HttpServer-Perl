@@ -3,6 +3,7 @@ use strict;
 use warnings;
 
 use Socket;
+use File::Basename;
 
 my %config = ();
 my %exec = ();
@@ -87,8 +88,54 @@ sub error {
     exit(0);
 }
 
+sub responseOk {
+    print CLIENT "HTTP/1.1 200 OK\r\n";
+    print CLIENT "Content-Length: " . $_[1] . "\r\n";
+    print CLIENT "Content-Type: " . $_[0] . "\r\n";
+    print CLIENT "\r\n";
+}
 
+sub resFile {
+    my $file = $_[0];
+    my $size = -s $file;
+    open(FILE, $file);
+    responseOk("text/html", $size);
+    while(<FILE>){
+        print CLIENT;
+    }
+    close(FILE);
+    close(CLIENT);
+    exit(0);
+}
+
+sub dirToHtml {
+    my $res = "";
+    my @files = glob($_[0] . "/*");
+    foreach my $file (@files) {
+        my $toMatch = $_[0] . "/" .$config{"index"};
+        if($file . "\n" eq $toMatch){
+            resFile($_[0] . "/" ."index.html");
+        }
+    }
+    $res = "<html><body><ul>";
+    foreach my $file (@files) {
+        $res = $res . '<li><a href="' . $_[1] . "/" . basename($file) . '">' . basename($file) . "</a></li>";
+    }
+    $res = $res . "</ul></body></html>";
+    my $size = length($res);
+    responseOk("text/html", $size);
+    print CLIENT $res;
+    close(CLIENT);
+    exit(0);
+}
+
+sub sigChld {
+    $nbTotalClient --;
+}
+
+$|=1;
 initConfig();
+$SIG{'CHLD'} = 'sigChld';
 
 socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création impossible");
 setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -98,16 +145,17 @@ listen(SERVEUR, 10) or die("listen");
 
 while(1){
     accept(CLIENT,SERVEUR);
+    autoflush CLIENT 1;
     if($nbTotalClient <= $config{"clients"}){
         $nbTotalClient++;
         push @children, fork();
         if($children[-1] == 0){
-            parseRequest();
+            my $path = parseRequest();
+            dirToHtml($path, $path);
         }
     }else {
         if(fork() == 0){
             error(503);
         }
     }
-    close(CLIENT);
 }
