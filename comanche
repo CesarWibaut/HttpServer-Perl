@@ -66,7 +66,12 @@ sub verifFichier{
                     dirToHtml($newRoute, $_[0]);
             }else{
                 if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
-                    resFile($newRoute);
+                    if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/){
+                        resFile($newRoute,"text/html");
+                    }else{
+                        resFile($newRoute,"image/png")
+                    }
+                    
                 }else{
                     error(415);
                 }
