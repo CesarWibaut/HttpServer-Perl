@@ -34,12 +34,50 @@ sub initConfig {
     close(CONFIG);
 }
 sub verifFichier{
-    if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
-        return 1;
-    }else{
-        return 0;
-    }
+    if($_[0] =~ '^/(.*)\.exe(.*)$'){
+        my $newExec = $_[0];
+        my @key = keys(%exec);
+        my $value = $exec{$key[0]};
+        $newExec =~ s/$key[0]/$value/; 
+        my $var1 = $1;  
+        my  $var2 = $2;
+        $newExec =~ s/\\1/$var1/;
+        $newExec =~ s/\\2/$var2/;       
+        if(-e $newExec){
+            #resFile($newExec);
+            return 2;
+        }else{
+            #error(404);
+            return 404;
+        }        
+    }elsif($_[0] =~ '^/(.*)$'){
+        my $newRoute = $_[0];
+        my @key = keys(%route);
+        my $value = $route{$key[0]};
+        $newRoute=~ s/$key[0]/$value/;
+        my $var1 = $1;
+        $newRoute =~ s/\\1/$var1/;       
+        chomp $newRoute;
+        if( -e $newRoute){
+            if( -d $newRoute){
+                    #dirToHtml($_[0],$newRoute);
+                    return 18;
+            }else{
+                if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
+                    #resFile($newRoute);
+                    return 1;
+                }else{
+                    #error(415);
+                    return 0;
+                }
+            }
+            
+        }else{
+            #error(404);
+            return 404;
+        }
+        
+    }    
 }
 
 initConfig();
-
