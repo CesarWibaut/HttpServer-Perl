@@ -21,6 +21,7 @@ sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
     while(<CONFIG>){
+        chomp;
         if(/set\ */){
             @param = split / /, $_;
             $config{$param[1]} = $param[2];
@@ -76,16 +77,15 @@ sub error {
     }elsif ($code == 505) {
         $phrase = "HTTP Version Not Supported";
     }
-    select(CLIENT);
     $|=1;
-    my $size = length($phrase);
-    print  "HTTP/1.1 $code $phrase\r\n";
-    print "Content-Length: $size\r\n";
-    print ("\r\n");
-    print "$phrase";
-    close(CLIENT);
-    select(STDOUT);
-    exit(0);
+    my $size = -s $config{"error"};
+    print CLIENT "HTTP/1.1 $code $phrase\r\n";
+    print CLIENT "Content-Length: $size\r\n";
+    print CLIENT "\r\n";
+    open(ERROR, $config{"error"});
+    while(<ERROR>){
+        print CLIENT
+    }
 }
 
 sub responseOk {
@@ -104,38 +104,40 @@ sub resFile {
         print CLIENT;
     }
     close(FILE);
-    close(CLIENT);
-    exit(0);
 }
 
 sub dirToHtml {
     my $res = "";
     my @files = glob($_[0] . "/*");
+    my $index = 1;
     foreach my $file (@files) {
         my $toMatch = $_[0] . "/" .$config{"index"};
-        if($file . "\n" eq $toMatch){
+        if($file eq $toMatch){
+            $index =0;
             resFile($_[0] . "/" ."index.html");
         }
     }
-    $res = "<html><body><ul>";
-    foreach my $file (@files) {
-        $res = $res . '<li><a href="' . $_[1] . "/" . basename($file) . '">' . basename($file) . "</a></li>";
+    if($index){
+        $res = "<html><body><ul>";
+        foreach my $file (@files) {
+            $res = $res . '<li><a href="' . $_[1] . "/" . basename($file) . '">' . basename($file) . "</a></li>";
+        }
+        $res = $res . "</ul></body></html>";
+        my $size = length($res);
+        responseOk("text/html", $size);
+        print CLIENT $res;
     }
-    $res = $res . "</ul></body></html>";
-    my $size = length($res);
-    responseOk("text/html", $size);
-    print CLIENT $res;
-    close(CLIENT);
-    exit(0);
 }
 
-sub sigChld {
+sub fin {
+    my $pid=wait();
+    print "fin de $pid";
     $nbTotalClient --;
 }
 
-$|=1;
+#$SIG{"CHLD"} = "fin";
 initConfig();
-$SIG{'CHLD'} = 'sigChld';
+
 
 socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création impossible");
 setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -143,19 +145,22 @@ my $adresse_complete = sockaddr_in($config{"port"}, INADDR_ANY) or die("sockaddr
 bind(SERVEUR, $adresse_complete) or die("bind $!");
 listen(SERVEUR, 10) or die("listen");
 
-while(1){
+my $pid=$$;
+while ($pid != 0){
     accept(CLIENT,SERVEUR);
-    autoflush CLIENT 1;
-    if($nbTotalClient <= $config{"clients"}){
-        $nbTotalClient++;
-        push @children, fork();
-        if($children[-1] == 0){
+    if($nbTotalClient < $config{'clients'}) {
+        $nbTotalClient += 1;
+        if(($pid = fork()) == 0){
             my $path = parseRequest();
-            dirToHtml($path, $path);
+            dirToHtml($path, "/xd/xd");
+            close(CLIENT);
+            exit(0);
+        }else {
+            push @children, $pid;
+            close(CLIENT);
         }
     }else {
-        if(fork() == 0){
-            error(503);
-        }
+        error(503);
+        close(CLIENT);
     }
 }
