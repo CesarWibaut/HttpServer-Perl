@@ -40,25 +40,60 @@ sub initConfig {
 sub parseRequest {
     my @param = ();
     my $path = "";
+    my $blankLine=0;
     while(<CLIENT>){
         if($. == 1){
             @param = split / /, $_;
-            $param[0] eq "GET" or die "Invalid Method\n";
+            $param[0] and $param[1] and $param[2] and not $param[3] or error(400);
+            $param[0] eq "GET" or error(405);
             $path = $param[1];
-            $param[2] eq "HTTP/1.1\r\n" or die "HTTP Version not supported\n"; 
+            $param[2] eq "HTTP/1.1\r\n" or error(505); 
         }elsif($_ eq "\r\n"){
-            return $path;
+            $blankLine =1;
+            last;
         }
     }
-    die "Error parsing request\n";
+    $blankLine or error(400);
+    return $path;
 }
+
+sub error {
+    my $phrase = "";
+    my $code = $_[0];
+    if($code == 400){
+        $phrase = "Bad Request";
+    }elsif ($code == 403) {
+        $phrase = "Forbidden";
+    }elsif ($code == 404) {
+        $phrase = "Not Found";
+    }elsif ($code == 405) {
+        $phrase = "Method Not Allowed";
+    }elsif ($code == 415) {
+        $phrase = "Unsupported Media Type";
+    }elsif ($code == 503) {
+        $phrase = "Service Unavailable";
+    }elsif ($code == 505) {
+        $phrase = "HTTP Version Not Supported";
+    }
+    select(CLIENT);
+    $|=1;
+    my $size = length($phrase);
+    print  "HTTP/1.1 $code $phrase\r\n";
+    print "Content-Length: $size\r\n";
+    print ("\r\n");
+    print "$phrase";
+    close(CLIENT);
+    select(STDOUT);
+    exit(0);
+}
+
 
 initConfig();
 
 socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création impossible");
 setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
 my $adresse_complete = sockaddr_in($config{"port"}, INADDR_ANY) or die("sockaddr");
-bind(SERVEUR, $adresse_complete) or die("bind");
+bind(SERVEUR, $adresse_complete) or die("bind $!");
 listen(SERVEUR, 10) or die("listen");
 
 while(1){
@@ -67,12 +102,12 @@ while(1){
         $nbTotalClient++;
         push @children, fork();
         if($children[-1] == 0){
-            print parseRequest();
-            close(CLIENT);
-            exit(0);
+            parseRequest();
         }
     }else {
-        # Erreur 503
+        if(fork() == 0){
+            error(503);
+        }
     }
     close(CLIENT);
 }
