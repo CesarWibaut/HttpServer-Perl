@@ -7,6 +7,8 @@ use Socket;
 my %config = ();
 my %exec = ();
 my %route = ();
+my $nbTotalClient = 0;
+my @children = ();
 
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n" ;
@@ -57,8 +59,20 @@ socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création 
 setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
 my $adresse_complete = sockaddr_in($config{"port"}, INADDR_ANY) or die("sockaddr");
 bind(SERVEUR, $adresse_complete) or die("bind");
-listen(SERVEUR, $config{"clients"}) or die("listen");
+listen(SERVEUR, 10) or die("listen");
 
-accept(CLIENT,SERVEUR);
-
-print parseRequest();
+while(1){
+    accept(CLIENT,SERVEUR);
+    if($nbTotalClient <= $config{"clients"}){
+        $nbTotalClient++;
+        push @children, fork();
+        if($children[-1] == 0){
+            print parseRequest();
+            close(CLIENT);
+            exit(0);
+        }
+    }else {
+        # Erreur 503
+    }
+    close(CLIENT);
+}
