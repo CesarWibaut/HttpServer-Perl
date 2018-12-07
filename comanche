@@ -2,11 +2,15 @@
 use strict;
 use warnings;
 
+use Socket;
+use File::Basename;
 
 my %config = ();
 my %exec = ();
-
 my %route = ();
+my $nbTotalClient = 0;
+my @children = ();
+
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n" ;
 	keys(%route) and values(%route) or die "Missing config parameter";
@@ -17,6 +21,7 @@ sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
     while(<CONFIG>){
+        chomp;
         if(/set\ */){
             @param = split / /, $_;
             $config{$param[1]} = $param[2];
@@ -45,10 +50,8 @@ sub verifFichier{
         $newExec =~ s/\\2/$var2/;       
         if(-e $newExec){
             #resFile($newExec);
-            return 2;
         }else{
-            #error(404);
-            return 404;
+            error(404);
         }        
     }elsif($_[0] =~ '^/(.*)$'){
         my $newRoute = $_[0];
@@ -65,19 +68,140 @@ sub verifFichier{
             }else{
                 if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
                     #resFile($newRoute);
-                    return 1;
                 }else{
-                    #error(415);
-                    return 0;
+                    error(415);
                 }
             }
             
         }else{
-            #error(404);
-            return 404;
+            error(404);
         }
         
     }    
 }
 
+sub parseRequest {
+    my @param = ();
+    my $path = "";
+    my $blankLine=0;
+    while(<CLIENT>){
+        if($. == 1){
+            @param = split / /, $_;
+            $param[0] and $param[1] and $param[2] and not $param[3] or error(400);
+            $param[0] eq "GET" or error(405);
+            $path = $param[1];
+            $param[2] eq "HTTP/1.1\r\n" or error(505); 
+        }elsif($_ eq "\r\n"){
+            $blankLine =1;
+            last;
+        }
+    }
+    $blankLine or error(400);
+    return $path;
+}
+
+sub error {
+    my $phrase = "";
+    my $code = $_[0];
+    if($code == 400){
+        $phrase = "Bad Request";
+    }elsif ($code == 403) {
+        $phrase = "Forbidden";
+    }elsif ($code == 404) {
+        $phrase = "Not Found";
+    }elsif ($code == 405) {
+        $phrase = "Method Not Allowed";
+    }elsif ($code == 415) {
+        $phrase = "Unsupported Media Type";
+    }elsif ($code == 503) {
+        $phrase = "Service Unavailable";
+    }elsif ($code == 505) {
+        $phrase = "HTTP Version Not Supported";
+    }
+    $|=1;
+    my $size = -s $config{"error"};
+    print CLIENT "HTTP/1.1 $code $phrase\r\n";
+    print CLIENT "Content-Length: $size\r\n";
+    print CLIENT "\r\n";
+    open(ERROR, $config{"error"});
+    while(<ERROR>){
+        print CLIENT
+    }
+}
+
+sub responseOk {
+    print CLIENT "HTTP/1.1 200 OK\r\n";
+    print CLIENT "Content-Length: " . $_[1] . "\r\n";
+    print CLIENT "Content-Type: " . $_[0] . "\r\n";
+    print CLIENT "\r\n";
+}
+
+sub resFile {
+    my $file = $_[0];
+    my $size = -s $file;
+    open(FILE, $file);
+    responseOk("text/html", $size);
+    while(<FILE>){
+        print CLIENT;
+    }
+    close(FILE);
+}
+
+sub dirToHtml {
+    my $res = "";
+    my @files = glob($_[0] . "/*");
+    my $index = 1;
+    foreach my $file (@files) {
+        my $toMatch = $_[0] . "/" .$config{"index"};
+        if($file eq $toMatch){
+            $index =0;
+            resFile($_[0] . "/" ."index.html");
+        }
+    }
+    if($index){
+        $res = "<html><body><ul>";
+        foreach my $file (@files) {
+            $res = $res . '<li><a href="' . $_[1] . "/" . basename($file) . '">' . basename($file) . "</a></li>";
+        }
+        $res = $res . "</ul></body></html>";
+        my $size = length($res);
+        responseOk("text/html", $size);
+        print CLIENT $res;
+    }
+}
+
+sub fin {
+    my $pid=wait();
+    print "fin de $pid";
+    $nbTotalClient --;
+}
+
+#$SIG{"CHLD"} = "fin";
 initConfig();
+
+
+socket(SERVEUR, PF_INET, SOCK_STREAM, getprotobyname("tcp")) or die ("Création impossible");
+setsockopt(SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
+my $adresse_complete = sockaddr_in($config{"port"}, INADDR_ANY) or die("sockaddr");
+bind(SERVEUR, $adresse_complete) or die("bind $!");
+listen(SERVEUR, 10) or die("listen");
+
+my $pid=$$;
+while ($pid != 0){
+    accept(CLIENT,SERVEUR);
+    if($nbTotalClient < $config{'clients'}) {
+        $nbTotalClient += 1;
+        if(($pid = fork()) == 0){
+            my $path = parseRequest();
+            dirToHtml($path, "/xd/xd");
+            close(CLIENT);
+            exit(0);
+        }else {
+            push @children, $pid;
+            close(CLIENT);
+        }
+    }else {
+        error(503);
+        close(CLIENT);
+    }
+}
