@@ -63,11 +63,10 @@ sub verifFichier{
         chomp $newRoute;
         if( -e $newRoute){
             if( -d $newRoute){
-                    #dirToHtml($_[0],$newRoute);
-                    return 18;
+                    dirToHtml($newRoute, $_[0]);
             }else{
                 if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
-                    #resFile($newRoute);
+                    resFile($newRoute);
                 }else{
                     error(415);
                 }
@@ -140,7 +139,7 @@ sub resFile {
     my $file = $_[0];
     my $size = -s $file;
     open(FILE, $file);
-    responseOk("text/html", $size);
+    responseOk($_[1], $size);
     while(<FILE>){
         print CLIENT;
     }
@@ -193,7 +192,7 @@ while ($pid != 0){
         $nbTotalClient += 1;
         if(($pid = fork()) == 0){
             my $path = parseRequest();
-            dirToHtml($path, "/xd/xd");
+            verifFichier($path);
             close(CLIENT);
             exit(0);
         }else {
