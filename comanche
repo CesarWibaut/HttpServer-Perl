@@ -240,7 +240,7 @@ if($arg eq "start"){
                     my $path = parseRequest();
                     verifFichier($path);
                     close(CLIENT);
-                    kill(31, getppid());
+                    kill("USR2", getppid());
 
                     exit(0);
                 }else {
@@ -263,7 +263,7 @@ if($arg eq "start"){
                     exit(0);
                 }
                 if($_ eq "status"){
-                    kill(30, $firstChild);
+                    kill("USR1", $firstChild);
                 }
             }
         }
