@@ -36,7 +36,8 @@ sub List {
             if(-d $path || $path =~ / *.html/ || $path =~ / *.txt/ || $path =~ / *.png/){
                 return $path;
             }else{
-                return "error";
+                error(415);
+                
             }
             
         }
@@ -90,17 +91,12 @@ sub verifFichier {
                 if( -r $newPath){
                     if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
                         if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/){
-                        resFile($newPath,"text/html");                       
+                            resFile($newPath,"text/html");                       
+                        }else{
+                            resFile($newPath,"image/png");                       
+                        }   
                     }else{
-                        resFile($newPath,"image/png");                       
-                    }
-                    
-                    }else{                    
-                }else{
-                    }else{                    
-                }else{
-                    }else{                    
-                      #resFile($newExec);
+                        #resFile($newExec);
                     }
                 }else{
                     error(403);
@@ -111,10 +107,6 @@ sub verifFichier {
             error(404);            
         }
     }else{
-        error(404);        
-            error(404);
-        error(404);        
-            error(404);
         error(404);        
     }
 }
