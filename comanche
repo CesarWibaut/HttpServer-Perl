@@ -21,6 +21,41 @@ sub verifConfig {
 	keys(%exec) and values(%exec) or die "Missing config parameter\n";
 }
 
+sub List {
+    my $path = $_[0];
+    for my $key(keys(%route)){
+        if($path =~ $key){
+            my $value= $route{$key};
+            $path =~ s/$key/$value/;
+            my $nb_param = @-;
+            $nb_param = $nb_param--;
+            for(my $count_param = 1; $count_param<$nb_param;$count_param++){
+                my $id = eval('$'.$count_param);
+                $path =~ s/\\$count_param/$id/;
+            }
+            if(-d $path || $path =~ / *.html/ || $path =~ / *.txt/ || $path =~ / *.png/){
+                return $path;
+            }else{
+                return "error";
+            }
+            
+        }
+    }
+    for my $key(keys(%exec)){
+        if($path =~ $key){
+            my $value = $exec{$key};
+            $path =~ s/$key/$value/;
+            my $nb_param = @-;
+            $nb_param=$nb_param--;
+            for(my $count_param= 1;$count_param<$nb_param;$count_param++){
+                my $id = eval('$'.$count_param);
+                $path =~ s/\\$count_param/$id/;
+            }
+            return $path."\n";
+        }
+    }
+    return "error";
+}
 sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
