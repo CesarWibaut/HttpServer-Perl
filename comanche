@@ -33,7 +33,7 @@ sub List {
                 my $id = eval('$'.$count_param);
                 $path =~ s/\\$count_param/$id/;
             }
-            if($path =~ / *.html/ || $path =~ / *.txt/ || $path =~ / *.png/){
+            if(-d $path || $path =~ / *.html/ || $path =~ / *.txt/ || $path =~ / *.png/){
                 return $path;
             }else{
                 return "error";
