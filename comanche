@@ -14,6 +14,13 @@ my $nbTotalClient = 0;
 my @children = ();
 my $nbTotalRequetesRecues = 0;
 my $nbTotalRequetesTraitees = 0;
+my $type="";
+my $machine="";
+my $request="";
+my $proj="";
+my $resp="";
+my $returnCode=0;
+
 
 sub verifConfig {
     $config{"logfile"} and $config{"clients"} and $config {"port"} and $config{"error"} and $config{"index"} or die "Missing config parameter\n" ;
@@ -25,6 +32,7 @@ sub List {
     my $path = $_[0];
     for my $key(keys(%route)){
         if($path =~ $key){
+            $type = "get-s";
             my $value= $route{$key};
             $path =~ s/$key/$value/;
             my $nb_param = @-;
@@ -44,6 +52,7 @@ sub List {
     }
     for my $key(keys(%exec)){
         if($path =~ $key){
+            $type = "get-d";
             my $value = $exec{$key};
             $path =~ s/$key/$value/;
             my $nb_param = @-;
@@ -83,6 +92,7 @@ sub verifFichier {
     my $path = $_[0];
     my $newPath = List($path);
     chomp $newPath;
+    $proj = $newPath;
     if($newPath ne "error"){
         if(-e $newPath){
             if( -d $newPath){
@@ -117,16 +127,22 @@ sub parseRequest {
     my $blankLine=0;
     while(<CLIENT>){
         if($. == 1){
+            chomp $_;
+            $request = $_;
+            chop $request;
             @param = split / /, $_;
             $param[0] and $param[1] and $param[2] and not $param[3] or error(400);
             $param[0] eq "GET" or error(405);
             $path = $param[1];
-            $param[2] eq "HTTP/1.1\r\n" or error(505); 
+            $param[2] eq "HTTP/1.1\r" or error(505); 
         }elsif($_ eq "\r\n"){
             $blankLine =1;
             last;
         }elsif($_ =~ /Host: .*\r\n/){
-            print $_;
+            chomp $_;
+            my @array = split / /,$_;
+            $machine = $array[1];
+            chop $machine;
         }
     }
     $blankLine or error(400);
@@ -136,6 +152,8 @@ sub parseRequest {
 sub error {
     my $phrase = "";
     my $code = $_[0];
+    $returnCode = $code;
+    printLog();
     if($code == 400){
         $phrase = "Bad Request";
     }elsif ($code == 403) {
@@ -167,6 +185,8 @@ sub error {
 }
 
 sub responseOk {
+    $returnCode = 200;
+    printLog();
     print CLIENT "HTTP/1.1 200 OK\r\n";
     print CLIENT "Content-Length: " . $_[1] . "\r\n";
     print CLIENT "Content-Type: " . $_[0] . "\r\n";
@@ -207,6 +227,13 @@ sub dirToHtml {
     }
 }
 
+sub printLog {
+    $|=1;
+    my $tim = time();
+    print ECRITURE "$tim;$type;$machine;$request;$proj;$returnCode;\n";
+    close(ECRITURE);
+}
+
 $SIG{"CHLD"} = sub { 
                         while( ( my $child = waitpid( -1, &WNOHANG ) ) > 0 ) {
                             $nbTotalClient -= 1;
@@ -214,7 +241,14 @@ $SIG{"CHLD"} = sub {
                             @children or die "Server stopped\n";
                             $index++ until $child and $children[$index] == $child and $children[$index];
                             splice(@children, $index, 1);
+                            $nbTotalRequetesTraitees +=1;
                         }
+                        open(LOGS, ">>".$config{"logfile"});
+                        while(<LECTURE>){
+                            print LOGS;
+                        }
+                        close(LOGS);
+
                    };
 
 $SIG{"TERM"} = sub {
@@ -238,10 +272,7 @@ if($arg eq "start"){
                         print STDOUT "$nbTotalRequetesRecues $nbTotalRequetesTraitees\n";
                         my $actifs = scalar @children;
                         print STDOUT "Actifs : $actifs, liste : @children\n";
-                   };
-
-        $SIG{"USR2"} = sub {
-                        $nbTotalRequetesTraitees +=1;
+                        
                    };
 
         initConfig();
@@ -258,14 +289,16 @@ if($arg eq "start"){
             if($nbTotalClient < $config{'clients'}) {
                 $nbTotalClient += 1;
                 $nbTotalRequetesRecues += 1;
+                pipe(LECTURE, ECRITURE);
                 if(($pid = fork()) == 0){
+                    close(LECTURE);
                     my $path = parseRequest();
                     verifFichier($path);
                     close(CLIENT);
-                    kill("USR2", getppid());
 
                     exit(0);
                 }else {
+                    close(ECRITURE);
                     push @children, $pid;
                     close(CLIENT);
                 }
