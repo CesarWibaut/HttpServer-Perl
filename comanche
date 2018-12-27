@@ -28,58 +28,44 @@ sub verifConfig {
 	keys(%exec) and values(%exec) or die "Missing config parameter\n";
 }
 
-sub List {
+sub checkRoute {
     my $path = $_[0];
     for my $key(keys(%route)){
         if($path =~ $key){
             $type = "get-s";
             my $value= $route{$key};
-            $path =~ s/$key/$value/;
-            my $nb_param = @-;
-            $nb_param = $nb_param--;
-            for(my $count_param = 1; $count_param<$nb_param;$count_param++){
-                my $id = eval('$'.$count_param);
-                $path =~ s/\\$count_param/$id/;
-            }
-            if(-d $path || $path =~ / *.html/ || $path =~ / *.txt/ || $path =~ / *.png/){
-                return $path;
-            }else{
-                error(415);
-                
-            }
-            
+            my $toReplace = $1;
+            $value =~ s/\\1/$toReplace/g;
+            print $value;
+            return $value;
         }
     }
     for my $key(keys(%exec)){
         if($path =~ $key){
             $type = "get-d";
-            my $value = $exec{$key};
-            $path =~ s/$key/$value/;
-            my $nb_param = @-;
-            $nb_param=$nb_param--;
-            for(my $count_param= 1;$count_param<$nb_param;$count_param++){
-                my $id = eval('$'.$count_param);
-                $path =~ s/\\$count_param/$id/;
-            }
-            return $path."\n";
+            my $value= $exec{$key};
+            my $toReplaceFirst = $1;
+            my $toReplaceSecond = $2;
+            $value =~ s/\\1/$toReplaceFirst/g;
+            $value =~ s/\\2/$toReplaceSecond/g;
+            return $value;
         }
     }
-    return "error";
 }
 sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
     while(<CONFIG>){
         chomp;
-        if(/set\ */){
+        if(/^set\ */){
             @param = split /\s+/, $_;
             $config{$param[1]} = $param[2];
         }
-		if(/route\ */){	
+		if(/^route\ */){	
 			@param = split /\s+/,$_;
 			$route{$param[1]} = $param[3];
 		}	
-        if(/exec\ */){
+        if(/^exec\ */){
             @param = split /\s+/, $_;
             $exec{$param[1]} = $param[3];
         }
@@ -90,7 +76,8 @@ sub initConfig {
 
 sub verifFichier {
     my $path = $_[0];
-    my $newPath = List($path);
+    my $newPath = checkRoute($path);
+    error(415) unless $newPath;
     chomp $newPath;
     $proj = $newPath;
     if($newPath ne "error"){
@@ -114,7 +101,7 @@ sub verifFichier {
             }
         }
         else{
-            error(404);            
+            error(404);
         }
     }else{
         error(404);        
