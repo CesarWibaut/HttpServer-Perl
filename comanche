@@ -29,6 +29,7 @@ sub verifConfig {
 }
 
 sub checkRoute {
+    my %ret = ();
     my $path = $_[0];
     for my $key(keys(%route)){
         if($path =~ $key){
@@ -36,8 +37,8 @@ sub checkRoute {
             my $value= $route{$key};
             my $toReplace = $1;
             $value =~ s/\\1/$toReplace/g;
-            print $value;
-            return $value;
+            $ret{$value} = "f";
+            return %ret;
         }
     }
     for my $key(keys(%exec)){
@@ -48,10 +49,13 @@ sub checkRoute {
             my $toReplaceSecond = $2;
             $value =~ s/\\1/$toReplaceFirst/g;
             $value =~ s/\\2/$toReplaceSecond/g;
-            return $value;
+            $ret{$value} = "e";
+            return %ret;
         }
     }
+    return %ret;
 }
+
 sub initConfig {
     open(CONFIG, "./comanche.conf") or die ("Error openning config file\n");
     my @param = ();
@@ -76,36 +80,56 @@ sub initConfig {
 
 sub verifFichier {
     my $path = $_[0];
-    my $newPath = checkRoute($path);
-    error(415) unless $newPath;
+    my %newPathHash = checkRoute($path);
+    my $newPath = (keys %newPathHash)[0];
+    if(! $newPath) {
+        error(415);
+    }
     chomp $newPath;
     $proj = $newPath;
-    if($newPath ne "error"){
-        if(-e $newPath){
-            if( -d $newPath){
-                dirToHtml($newPath,$path);
-            }else{
-                if( -r $newPath){
-                    if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/ || $_[0] =~ / *.png/){
-                        if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/){
-                            resFile($newPath,"text/html");                       
-                        }else{
-                            resFile($newPath,"image/png");                       
-                        }   
-                    }else{
-                        #resFile($newExec);
-                    }
-                }else{
-                    error(403);
-                }                
-            }
-        }
-        else{
-            error(404);
-        }
-    }else{
-        error(404);        
+
+    if($newPathHash{$newPath} eq "f"){
+
+        -e $newPath or error(404);
+        -d $newPath and dirToHtml($newPath, $path);
+        -r $newPath or error(403);
+
+        if($_[0] =~ / *.html/ || $_[0] =~ / *.txt/){
+            resFile($newPath,"text/html");                       
+        } elsif($_[0] =~ / *.png/){
+            resFile($newPath,"image/png");                       
+        } else {
+           error(415);
+        } 
+
+    } else {
+        verifExec($newPath);
     }
+}
+
+sub verifExec {
+    my $path = $_[0];
+    my @array = split /\?/, $path;
+    -e $array[0] or error(404);
+    -r $array[0] or error(403);
+    my $cmdLine = $array[0];
+    if($array[1]){
+        my @params = split /&/, $array[1];
+        foreach(@params) {
+            $_ =~ /(.*)=(.*)/;
+            $cmdLine = $cmdLine . " -$1 $2";
+        } 
+    }
+    resExec($cmdLine);
+}
+
+sub resExec {
+    my $cmdLine = $_[0];
+    my $result = `$cmdLine`;
+    my $size = length $result;
+    responseOk("text/html", $size);
+    print CLIENT $result;
+    exit(0);
 }
 
 sub parseRequest {
@@ -189,6 +213,7 @@ sub resFile {
         print CLIENT;
     }
     close(FILE);
+    exit(0);
 }
 
 sub dirToHtml {
@@ -211,6 +236,7 @@ sub dirToHtml {
         my $size = length($res);
         responseOk("text/html", $size);
         print CLIENT $res;
+        exit(0);
     }
 }
 
@@ -218,30 +244,9 @@ sub printLog {
     $|=1;
     my $tim = time();
     print ECRITURE "$tim;$type;$machine;$request;$proj;$returnCode;\n";
-    close(ECRITURE);
 }
 
-$SIG{"CHLD"} = sub { 
-                        while( ( my $child = waitpid( -1, &WNOHANG ) ) > 0 ) {
-                            $nbTotalClient -= 1;
-                            my $index = 0;
-                            @children or die "Server stopped\n";
-                            $index++ until $child and $children[$index] == $child and $children[$index];
-                            splice(@children, $index, 1);
-                            $nbTotalRequetesTraitees +=1;
-                        }
-                        open(LOGS, ">>".$config{"logfile"});
-                        while(<LECTURE>){
-                            print LOGS;
-                        }
-                        close(LOGS);
 
-                   };
-
-$SIG{"TERM"} = sub {
-                        kill(9, @children) or exit 1;
-                        exit 0;
-                   };
 
 
 if(! -e "com.pipe"){
@@ -285,9 +290,31 @@ if($arg eq "start"){
 
                     exit(0);
                 }else {
+                    $SIG{"CHLD"} = sub { 
+                        while( ( my $child = waitpid( -1, &WNOHANG ) ) > 0 ) {
+                            $nbTotalClient -= 1;
+                            my $index = 0;
+                            @children or die "Server stopped\n";
+                            $index++ until $child and $children[$index] == $child and $children[$index];
+                            splice(@children, $index, 1);
+                            $nbTotalRequetesTraitees +=1;
+                        }
+                        open(LOGS, ">>".$config{"logfile"});
+                        while(<LECTURE>){
+                            print LOGS;
+                        }
+                        close(LOGS);
+
+                   };
+
+$SIG{"TERM"} = sub {
+                        kill(9, @children) or exit 1;
+                        exit 0;
+                   };
                     close(ECRITURE);
                     push @children, $pid;
                     close(CLIENT);
+
                 }
 
             }else {
