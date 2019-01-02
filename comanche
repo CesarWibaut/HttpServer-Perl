@@ -289,13 +289,16 @@ $SIG{"USR1"} = sub {
     close(STATUS);
 };
 
-
-$SIG{"TERM"} = sub {
+sub stopServer {
     kill("TERM", @children);
     printStartOrStop("stop");
+    unlink("./comanche.pid") if -e "./comanche.pid";
     exit 0;
-};
+}
 
+$SIG{"TERM"} = "stopServer";
+
+$SIG{"INT"} = "stopServer";
 
 if($arg eq "start"){
 
@@ -353,7 +356,6 @@ if($arg eq "start"){
     my $servPid = <SERV>;
     kill("TERM", $servPid);
     close(SERV);
-    unlink("./comanche.pid");
     print "Server successfully stopped\n";
 
 } elsif ($arg eq "status"){
